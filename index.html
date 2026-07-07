@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Helm</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Caveat:wght@600;700&family=Rubik:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --wall: #17191F;
+    --panel: #1D2027;
+    --panel-bright: #262A34;
+    --ink-dim: #5C6270;
+    --ink: #C9CEDA;
+    --accent: #FFC845;       /* the "work light" — highlights Doing */
+    --slot-dash: #3A4050;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background:
+      radial-gradient(ellipse at 30% 0%, rgba(255,255,255,0.03), transparent 60%),
+      var(--wall);
+    color: var(--ink);
+    font-family: 'Rubik', sans-serif;
+    overflow: hidden;
+    cursor: none;                       /* it's a TV */
+  }
+
+  .board {
+    display: grid;
+    grid-template-columns: 1fr 29%;
+    gap: 1.4vmin;
+    height: 100vh;
+    padding: 1.6vmin;
+  }
+
+  /* ---------- shared section chrome ---------- */
+  .section-label {
+    font-family: 'Archivo Black', sans-serif;
+    font-size: 1.7vmin;
+    letter-spacing: 0.35em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    padding: 1.2vmin 1.4vmin 0.6vmin;
+    display: flex; align-items: baseline; gap: 1vmin;
+  }
+  .section-label .count { font-family:'Rubik'; font-weight:500; font-size:1.5vmin; letter-spacing:0; color:var(--ink-dim); }
+
+  /* ---------- TO DO: Eisenhower ---------- */
+  .todo {
+    background: var(--panel);
+    border-radius: 1.2vmin;
+    display: flex; flex-direction: column;
+    min-height: 0;
+  }
+  .quad-grid {
+    flex: 1; min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 2px;
+    background: #14161C;
+    border-radius: 0 0 1.2vmin 1.2vmin;
+    overflow: hidden;
+  }
+  .quad {
+    background: var(--panel);
+    padding: 1vmin 1.2vmin;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .quad h3 {
+    font-size: 1.3vmin; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--ink-dim);
+    margin-bottom: 0.8vmin; flex: none;
+  }
+  .quad[data-q="ui"] h3 { color: #E8896F; }        /* urgent+important runs hot */
+  .quad-cards { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 1vmin; }
+
+  /* ---------- right rail ---------- */
+  .rail { display: grid; grid-template-rows: 42% 28% auto; gap: 1.4vmin; min-height: 0; }
+
+  /* DOING — the bright spot on the wall */
+  .doing {
+    background: var(--panel-bright);
+    border-radius: 1.2vmin;
+    box-shadow: 0 0 0 1px rgba(255,200,69,0.35), 0 0 6vmin rgba(255,200,69,0.07) inset;
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  .doing .section-label { color: var(--accent); }
+  .slots { flex: 1; display: grid; grid-template-rows: repeat(3, 1fr); gap: 1vmin; padding: 0 1.2vmin 1.2vmin; min-height: 0; }
+  .slot {
+    border: 2px dashed var(--slot-dash);
+    border-radius: 0.9vmin;
+    display: flex; align-items: center; justify-content: center;
+    position: relative; min-height: 0;
+  }
+  .slot .slot-num {
+    font-family: 'Archivo Black'; font-size: 2.4vmin; color: #2C3140;
+  }
+  .slot.filled { border-color: transparent; }
+  .slot.filled .slot-num { display: none; }
+  .slot .note { width: 94%; height: 88%; }
+  .slot .note .note-title { font-size: 2.5vmin; }
+
+  /* WAITING & DONE — deprioritized */
+  .waiting, .done { background: var(--panel); border-radius: 1.2vmin; opacity: 0.62; display: flex; flex-direction: column; min-height: 0; }
+  .waiting .cards { padding: 0 1.2vmin 1.2vmin; display: flex; flex-wrap: wrap; gap: 0.8vmin; overflow: hidden; align-content: flex-start; }
+  .waiting .note { transform: none !important; }
+  .waiting .note .note-title { font-size: 1.7vmin; }
+
+  .done-list { flex: 1; min-height: 0; overflow: hidden; padding: 0 1.4vmin 1.2vmin; }
+  .done-row {
+    display: flex; align-items: baseline; gap: 0.9vmin;
+    padding: 0.55vmin 0; border-bottom: 1px solid #23262E;
+    font-size: 1.55vmin;
+  }
+  .done-row .dot { width: 1vmin; height: 1vmin; border-radius: 50%; flex: none; align-self: center; }
+  .done-row .t { color: var(--ink); text-decoration: line-through; text-decoration-color: #4A505E; text-decoration-thickness: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .done-row .when { margin-left: auto; color: var(--ink-dim); font-size: 1.2vmin; flex: none; }
+  .done .count { color: var(--accent); }
+
+  /* ---------- the post-it note ---------- */
+  .note {
+    --rot: 0deg;
+    position: relative;
+    border-radius: 2px;
+    padding: 1.1vmin 1.1vmin 1.2vmin;
+    width: 11.5vmin; min-height: 9vmin;
+    transform: rotate(var(--rot));
+    box-shadow: 0 3px 6px rgba(0,0,0,0.45), 0 10px 18px rgba(0,0,0,0.28);
+    display: flex; flex-direction: column;
+    animation: settle 0.5s cubic-bezier(0.2, 1.6, 0.4, 1);
+  }
+  .note::before {                        /* adhesive strip */
+    content: ""; position: absolute; inset: 0 0 auto 0; height: 1.4vmin;
+    background: rgba(0,0,0,0.06); border-radius: 2px 2px 0 0;
+  }
+  .note-title {
+    font-family: 'Caveat', cursive; font-weight: 700;
+    font-size: 1.95vmin; line-height: 1.06; margin-top: 0.8vmin;
+    overflow: hidden;
+  }
+  .note-cat {
+    margin-top: auto; font-size: 0.95vmin; font-weight: 700;
+    letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.65;
+  }
+  .note.starry {
+    background:
+      radial-gradient(1px 1px at 18% 28%, #fff 99%, transparent),
+      radial-gradient(1.5px 1.5px at 72% 18%, #fff 99%, transparent),
+      radial-gradient(1px 1px at 84% 62%, #cfd4ff 99%, transparent),
+      radial-gradient(1px 1px at 38% 74%, #fff 99%, transparent),
+      radial-gradient(1.5px 1.5px at 56% 46%, #ffe9b3 99%, transparent),
+      radial-gradient(1px 1px at 10% 84%, #cfd4ff 99%, transparent),
+      linear-gradient(160deg, #1B2260 0%, #10143A 100%);
+  }
+  @keyframes settle {
+    from { transform: rotate(var(--rot)) scale(1.12) translateY(-1.5vmin); box-shadow: 0 16px 30px rgba(0,0,0,0.5); }
+    to   { transform: rotate(var(--rot)) scale(1); }
+  }
+  @media (prefers-reduced-motion: reduce) { .note { animation: none; } }
+
+  .demo-badge {
+    position: fixed; bottom: 1vmin; left: 50%; transform: translateX(-50%);
+    background: #2C3140; color: var(--ink-dim); font-size: 1.3vmin;
+    padding: 0.4vmin 1.2vmin; border-radius: 2vmin; letter-spacing: 0.05em;
+  }
+
+  .gate {
+    position: fixed; inset: 0; z-index: 50; cursor: auto;
+    background: var(--wall);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .gate-title {
+    font-family: 'Archivo Black'; letter-spacing: 0.35em; text-transform: uppercase;
+    color: var(--ink-dim); font-size: 2.2vmin; text-align: center; margin-bottom: 2.4vmin;
+  }
+  .gate-btn {
+    display: block; margin: 0 auto; cursor: pointer;
+    background: var(--accent); color: #3A2C00; border: none; border-radius: 1vmin;
+    padding: 1.4vmin 2.6vmin; font-family: 'Rubik'; font-weight: 700; font-size: 1.6vmin;
+  }
+</style>
+</head>
+<body>
+  <div class="board">
+    <section class="todo">
+      <div class="section-label">To Do <span class="count" id="todo-count"></span></div>
+      <div class="quad-grid">
+        <div class="quad" data-q="ui"><h3>Do first — urgent &amp; important</h3><div class="quad-cards" id="q-ui"></div></div>
+        <div class="quad" data-q="i"><h3>Schedule — important, not urgent</h3><div class="quad-cards" id="q-i"></div></div>
+        <div class="quad" data-q="u"><h3>Fit in — urgent, less important</h3><div class="quad-cards" id="q-u"></div></div>
+        <div class="quad" data-q="n"><h3>Whenever — neither</h3><div class="quad-cards" id="q-n"></div></div>
+      </div>
+    </section>
+
+    <div class="rail">
+      <section class="doing">
+        <div class="section-label">Doing</div>
+        <div class="slots" id="slots"></div>
+      </section>
+
+      <section class="waiting">
+        <div class="section-label">Waiting on <span class="count" id="wait-count"></span></div>
+        <div class="cards" id="waiting-cards"></div>
+      </section>
+
+      <section class="done">
+        <div class="section-label">Done <span class="count" id="done-count"></span></div>
+        <div class="done-list" id="done-list"></div>
+      </section>
+    </div>
+  </div>
+
+  <div class="gate" id="gate" style="display:none">
+    <div>
+      <div class="gate-title">Helm</div>
+      <button class="gate-btn" id="signin-btn">Sign in with Google</button>
+    </div>
+  </div>
+
+<script type="module">
+import { firebaseConfig, DEFAULT_CATEGORIES, DEMO_TASKS } from './firebase-config.js';
+
+const $ = id => document.getElementById(id);
+let categories = [];   // [{id, name, color, text, starry, order}]
+let tasks = [];        // [{id, title, cat(categoryId), status, important, urgent, completedAt}]
+
+// Stable pseudo-random rotation per task so notes don't jiggle on re-render.
+function rot(id){ let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0; return ((h % 50) / 10 - 2.5).toFixed(2) + 'deg'; }
+const catById = id => categories.find(c => c.id === id) || { name:'?', color:'#888', text:'#111', starry:false };
+
+function noteEl(t, big){
+  const c = catById(t.cat);
+  const el = document.createElement('div');
+  el.className = 'note' + (c.starry ? ' starry' : '');
+  el.style.setProperty('--rot', big ? '0.6deg' : rot(t.id));
+  if (!c.starry) el.style.background = `linear-gradient(175deg, ${c.color}, ${shade(c.color, -8)})`;
+  el.style.color = c.text;
+  el.innerHTML = `<div class="note-title"></div><div class="note-cat"></div>`;
+  el.querySelector('.note-title').textContent = t.title;
+  el.querySelector('.note-cat').textContent = c.name;
+  return el;
+}
+function shade(hex, pct){
+  const n = parseInt(hex.slice(1), 16), a = Math.round(2.55 * pct);
+  const r = Math.min(255, Math.max(0, (n >> 16) + a)), g = Math.min(255, Math.max(0, (n >> 8 & 255) + a)), b = Math.min(255, Math.max(0, (n & 255) + a));
+  return `rgb(${r},${g},${b})`;
+}
+function ago(ts){
+  if (!ts) return '';
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const days = Math.floor((Date.now() - d) / 864e5);
+  return days === 0 ? 'today' : days === 1 ? 'yesterday' : days + 'd ago';
+}
+
+function render(){
+  // To Do quadrants
+  const todo = tasks.filter(t => t.status === 'todo');
+  $('todo-count').textContent = todo.length || '';
+  const buckets = { ui: [], i: [], u: [], n: [] };
+  for (const t of todo) buckets[t.important ? (t.urgent ? 'ui' : 'i') : (t.urgent ? 'u' : 'n')].push(t);
+  for (const [k, list] of Object.entries(buckets)){
+    const box = $('q-' + k); box.innerHTML = '';
+    list.forEach(t => box.appendChild(noteEl(t)));
+  }
+  // Doing — three fixed slots
+  const doing = tasks.filter(t => t.status === 'doing').slice(0, 3);
+  const slots = $('slots'); slots.innerHTML = '';
+  for (let i = 0; i < 3; i++){
+    const s = document.createElement('div');
+    s.className = 'slot' + (doing[i] ? ' filled' : '');
+    s.innerHTML = `<span class="slot-num">${i + 1}</span>`;
+    if (doing[i]) s.appendChild(noteEl(doing[i], true));
+    slots.appendChild(s);
+  }
+  // Waiting
+  const waiting = tasks.filter(t => t.status === 'waiting');
+  $('wait-count').textContent = waiting.length || '';
+  const wc = $('waiting-cards'); wc.innerHTML = '';
+  waiting.forEach(t => wc.appendChild(noteEl(t)));
+  // Done — newest first
+  const done = tasks.filter(t => t.status === 'done')
+    .sort((a, b) => (b.completedAt?.seconds || b.completedAt || 0) - (a.completedAt?.seconds || a.completedAt || 0));
+  $('done-count').textContent = done.length;
+  const dl = $('done-list'); dl.innerHTML = '';
+  done.slice(0, 30).forEach(t => {
+    const c = catById(t.cat);
+    const row = document.createElement('div');
+    row.className = 'done-row';
+    row.innerHTML = `<span class="dot"></span><span class="t"></span><span class="when"></span>`;
+    row.querySelector('.dot').style.background = c.starry ? '#7D86E8' : c.color;
+    row.querySelector('.t').textContent = t.title;
+    row.querySelector('.when').textContent = ago(t.completedAt);
+    dl.appendChild(row);
+  });
+}
+
+if (firebaseConfig.apiKey === 'PASTE_ME'){
+  // ---- demo mode ----
+  categories = DEFAULT_CATEGORIES.map((c, i) => ({ ...c, id: 'c' + i }));
+  tasks = DEMO_TASKS.map(t => ({ ...t, cat: 'c' + t.cat, completedAt: Date.now() - 36e5 * 20 }));
+  render();
+  const b = document.createElement('div'); b.className = 'demo-badge';
+  b.textContent = 'Demo mode — paste your Firebase config to go live'; document.body.appendChild(b);
+} else {
+  const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
+  const { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
+  const { getFirestore, collection, onSnapshot } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  const gate = $('gate');
+  $('signin-btn').onclick = () => signInWithPopup(auth, new GoogleAuthProvider());
+
+  let unsubs = [];
+  onAuthStateChanged(auth, user => {
+    unsubs.forEach(u => u()); unsubs = [];
+    gate.style.display = user ? 'none' : 'flex';
+    if (!user) return;
+    unsubs.push(onSnapshot(collection(db, 'categories'), s => { categories = s.docs.map(d => ({ id: d.id, ...d.data() })).sort((a,b)=>a.order-b.order); render(); }));
+    unsubs.push(onSnapshot(collection(db, 'tasks'),      s => { tasks      = s.docs.map(d => ({ id: d.id, ...d.data() })); render(); }));
+  });
+}
+</script>
+</body>
+</html>

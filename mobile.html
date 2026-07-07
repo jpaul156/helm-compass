@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Compass</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Caveat:wght@700&family=Rubik:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --wall: #17191F; --panel: #1D2027; --panel2: #262A34;
+    --ink: #C9CEDA; --ink-dim: #6B7180; --accent: #FFC845;
+    --line: #2C3140;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color: transparent; }
+  body { background: var(--wall); color: var(--ink); font-family:'Rubik',sans-serif; min-height:100vh; }
+
+  header { padding: 16px 16px 10px; display:flex; align-items:center; justify-content:space-between; }
+  header h1 { font-family:'Archivo Black'; font-size:15px; letter-spacing:0.3em; text-transform:uppercase; color:var(--ink-dim); }
+  #cat-btn { background:none; border:1px solid var(--line); color:var(--ink-dim); border-radius:8px; padding:6px 12px; font-family:'Rubik'; font-size:13px; }
+
+  .tabs { display:flex; gap:6px; padding: 0 16px 12px; }
+  .tabs button {
+    flex:1; padding:9px 0; border-radius:9px; border:1px solid var(--line);
+    background:var(--panel); color:var(--ink-dim); font-family:'Rubik'; font-weight:500; font-size:13px;
+  }
+  .tabs button.on { background:var(--panel2); color:var(--ink); border-color:#3A4050; }
+  .tabs button[data-tab="doing"].on { color:var(--accent); border-color: rgba(255,200,69,0.4); }
+  .tabs .n { font-size:11px; color:var(--ink-dim); }
+
+  main { padding: 0 16px 110px; }
+  .quad-head { font-size:11px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:var(--ink-dim); margin: 18px 2px 8px; }
+  .quad-head.hot { color:#E8896F; }
+
+  .card {
+    display:flex; align-items:center; gap:12px;
+    border-radius: 3px; padding: 12px 14px; margin-bottom: 10px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+    position:relative;
+  }
+  .card::before { content:""; position:absolute; inset:0 0 auto 0; height:9px; background:rgba(0,0,0,0.06); border-radius:3px 3px 0 0; }
+  .card .t { font-family:'Caveat'; font-weight:700; font-size:21px; line-height:1.05; flex:1; }
+  .card .c { font-size:10px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; opacity:0.6; }
+  .card.starry {
+    background:
+      radial-gradient(1px 1px at 15% 30%, #fff 99%, transparent),
+      radial-gradient(1.5px 1.5px at 70% 20%, #fff 99%, transparent),
+      radial-gradient(1px 1px at 85% 70%, #cfd4ff 99%, transparent),
+      radial-gradient(1px 1px at 40% 80%, #ffe9b3 99%, transparent),
+      linear-gradient(160deg,#1B2260,#10143A);
+  }
+  .card .done-t { text-decoration: line-through; text-decoration-thickness:1.5px; opacity:0.75; }
+
+  .empty { text-align:center; color:var(--ink-dim); font-size:14px; padding: 40px 20px; line-height:1.6; }
+
+  #fab {
+    position:fixed; right:20px; bottom:24px; width:58px; height:58px; border-radius:16px;
+    background:var(--accent); color:#3A2C00; border:none; font-size:30px; line-height:0;
+    box-shadow: 0 6px 18px rgba(255,200,69,0.35); z-index: 5;
+  }
+
+  /* ---------- bottom sheet ---------- */
+  .scrim { position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:10; display:none; }
+  .scrim.open { display:block; }
+  .sheet {
+    position:fixed; left:0; right:0; bottom:0; z-index:11;
+    background:var(--panel2); border-radius: 18px 18px 0 0;
+    padding: 18px 18px calc(20px + env(safe-area-inset-bottom));
+    transform: translateY(105%); transition: transform 0.25s ease; max-height: 88vh; overflow-y:auto;
+  }
+  .sheet.open { transform: none; }
+  .sheet h2 { font-size:13px; letter-spacing:0.2em; text-transform:uppercase; color:var(--ink-dim); margin-bottom:14px; font-family:'Archivo Black'; }
+  .sheet label { display:block; font-size:12px; color:var(--ink-dim); margin: 14px 0 6px; font-weight:500; }
+  .sheet input[type=text] {
+    width:100%; background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    color:var(--ink); font-family:'Rubik'; font-size:16px; padding: 12px;
+  }
+  .chip-row { display:flex; flex-wrap:wrap; gap:8px; }
+  .chip {
+    border:1px solid var(--line); background:var(--panel); color:var(--ink);
+    border-radius: 20px; padding: 8px 14px; font-size:14px; font-family:'Rubik';
+  }
+  .chip.on { border-color: var(--accent); color: var(--accent); background: rgba(255,200,69,0.08); }
+  .cat-chip { display:flex; align-items:center; gap:7px; }
+  .cat-chip .sw { width:14px; height:14px; border-radius:4px; }
+  .cat-chip.on { border-color:#fff; color:#fff; }
+  .status-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .status-row .chip { text-align:center; padding: 12px 0; border-radius:10px; }
+  .sheet .actions { display:flex; gap:10px; margin-top: 22px; }
+  .btn { flex:1; padding: 14px 0; border-radius:12px; border:none; font-family:'Rubik'; font-weight:700; font-size:15px; }
+  .btn.save { background:var(--accent); color:#3A2C00; }
+  .btn.del { background:none; border:1px solid #5C3030; color:#E8896F; flex:0 0 auto; padding: 14px 18px; }
+  .warn { color:#E8896F; font-size:13px; margin-top:10px; display:none; }
+
+  /* category manager */
+  .cat-row { display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--line); }
+  .cat-row .sw { width:26px; height:26px; border-radius:6px; flex:none; }
+  .cat-row .nm { flex:1; }
+  .cat-row .rm { background:none; border:none; color:var(--ink-dim); font-size:18px; }
+  .new-cat { display:flex; gap:8px; margin-top:14px; align-items:center; }
+  .new-cat input[type=text] { flex:1; }
+  .new-cat input[type=color] { width:46px; height:46px; border:none; background:none; padding:0; }
+  .toast {
+    position:fixed; left:50%; bottom:96px; transform:translateX(-50%);
+    background:#2C3140; color:var(--ink); padding:10px 18px; border-radius:20px; font-size:13px;
+    z-index:20; opacity:0; transition:opacity 0.2s; pointer-events:none; white-space:nowrap;
+  }
+  .toast.show { opacity:1; }
+
+  .gate {
+    position:fixed; inset:0; z-index:30; background:var(--wall);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .gate-title { font-family:'Archivo Black'; font-size:15px; letter-spacing:0.3em; text-transform:uppercase; color:var(--ink-dim); text-align:center; margin-bottom:20px; }
+  .gate-btn {
+    display:block; margin:0 auto; background:var(--accent); color:#3A2C00; border:none;
+    border-radius:12px; padding:14px 26px; font-family:'Rubik'; font-weight:700; font-size:15px;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Compass</h1>
+    <button id="cat-btn">Categories</button>
+  </header>
+
+  <div class="tabs" id="tabs">
+    <button data-tab="todo" class="on">To Do <span class="n"></span></button>
+    <button data-tab="doing">Doing <span class="n"></span></button>
+    <button data-tab="waiting">Waiting <span class="n"></span></button>
+    <button data-tab="done">Done <span class="n"></span></button>
+  </div>
+
+  <main id="list"></main>
+  <button id="fab" aria-label="Add task">+</button>
+
+  <div class="scrim" id="scrim"></div>
+
+  <!-- task editor -->
+  <div class="sheet" id="task-sheet">
+    <h2 id="sheet-title">New task</h2>
+    <label for="f-title">Task</label>
+    <input type="text" id="f-title" placeholder="What needs doing?" autocomplete="off">
+    <label>Category</label>
+    <div class="chip-row" id="f-cats"></div>
+    <label>Priority</label>
+    <div class="chip-row">
+      <button class="chip" id="f-important">★ Important</button>
+      <button class="chip" id="f-urgent">⚡ Urgent</button>
+    </div>
+    <label>Where does it live?</label>
+    <div class="status-row" id="f-status"></div>
+    <div class="warn" id="doing-warn">Doing is full — three things max. Finish or park something first.</div>
+    <div class="actions">
+      <button class="btn del" id="f-delete">Delete</button>
+      <button class="btn save" id="f-save">Save</button>
+    </div>
+  </div>
+
+  <!-- category manager -->
+  <div class="sheet" id="cat-sheet">
+    <h2>Categories</h2>
+    <div id="cat-list"></div>
+    <div class="new-cat">
+      <input type="text" id="nc-name" placeholder="New category name">
+      <input type="color" id="nc-color" value="#C9A0FF" title="Note color">
+      <button class="chip" id="nc-starry">✦ Starry</button>
+    </div>
+    <div class="actions"><button class="btn save" id="nc-add">Add category</button></div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="gate" id="gate" style="display:none">
+    <div>
+      <div class="gate-title">Compass</div>
+      <button class="gate-btn" id="signin-btn">Sign in with Google</button>
+    </div>
+  </div>
+
+<script type="module">
+import { firebaseConfig, DEFAULT_CATEGORIES, DEMO_TASKS } from './firebase-config.js';
+
+const $ = id => document.getElementById(id);
+const LIVE = firebaseConfig.apiKey !== 'PASTE_ME';
+const STATUSES = [['todo','To Do'],['doing','Doing'],['waiting','Waiting'],['done','Done']];
+const QUADS = [
+  ['ui','Do first — urgent & important', true],
+  ['i','Schedule — important, not urgent', false],
+  ['u','Fit in — urgent, less important', false],
+  ['n','Whenever — neither', false]
+];
+
+let db, fs;                 // firestore handle + module fns
+let categories = [], tasks = [];
+let tab = 'todo';
+let editing = null;         // task id being edited, or null for new
+let draft = {};             // sheet state
+
+// ---------- data layer (Firestore or in-memory demo) ----------
+async function initData(){
+  if (!LIVE){
+    categories = DEFAULT_CATEGORIES.map((c,i)=>({ ...c, id:'c'+i }));
+    tasks = DEMO_TASKS.map(t => ({ ...t, cat:'c'+t.cat, completedAt: Date.now()-72e6 }));
+    render(); toast('Demo mode — edits won\u2019t persist'); return;
+  }
+  const app = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
+  const authMod = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
+  fs = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+  const fbApp = app.initializeApp(firebaseConfig);
+  db = fs.getFirestore(fbApp);
+  const auth = authMod.getAuth(fbApp);
+  const gate = $('gate');
+  $('signin-btn').onclick = () => authMod.signInWithPopup(auth, new authMod.GoogleAuthProvider());
+
+  let unsubs = [];
+  authMod.onAuthStateChanged(auth, user => {
+    unsubs.forEach(u => u()); unsubs = [];
+    gate.style.display = user ? 'none' : 'flex';
+    if (!user) return;
+    unsubs.push(fs.onSnapshot(fs.collection(db,'categories'), async s => {
+      categories = s.docs.map(d=>({id:d.id, ...d.data()})).sort((a,b)=>a.order-b.order);
+      if (!categories.length){ for (const c of DEFAULT_CATEGORIES) await fs.addDoc(fs.collection(db,'categories'), c); }
+      render();
+    }));
+    unsubs.push(fs.onSnapshot(fs.collection(db,'tasks'), s => { tasks = s.docs.map(d=>({id:d.id, ...d.data()})); render(); }));
+  });
+}
+async function saveTask(id, data){
+  if (!LIVE){
+    if (id){ Object.assign(tasks.find(t=>t.id===id), data); }
+    else tasks.push({ id:'d'+Math.random(), createdAt:Date.now(), ...data });
+    render(); return;
+  }
+  if (id) await fs.updateDoc(fs.doc(db,'tasks',id), data);
+  else await fs.addDoc(fs.collection(db,'tasks'), { createdAt: fs.serverTimestamp(), ...data });
+}
+async function removeTask(id){
+  if (!LIVE){ tasks = tasks.filter(t=>t.id!==id); render(); return; }
+  await fs.deleteDoc(fs.doc(db,'tasks',id));
+}
+
+// ---------- rendering ----------
+const catById = id => categories.find(c=>c.id===id) || {name:'?', color:'#888', text:'#111'};
+const doingCount = skip => tasks.filter(t => t.status==='doing' && t.id!==skip).length;
+
+function cardEl(t){
+  const c = catById(t.cat);
+  const el = document.createElement('div');
+  el.className = 'card' + (c.starry ? ' starry' : '');
+  if (!c.starry) el.style.background = c.color;
+  el.style.color = c.text;
+  el.innerHTML = `<div class="t${t.status==='done'?' done-t':''}"></div><div class="c"></div>`;
+  el.querySelector('.t').textContent = t.title;
+  el.querySelector('.c').textContent = c.name + (t.status==='todo' ? (t.important?' ★':'') + (t.urgent?' ⚡':'') : '');
+  el.onclick = () => openTask(t);
+  return el;
+}
+function render(){
+  // tab counts
+  for (const b of document.querySelectorAll('#tabs button')){
+    const n = tasks.filter(t=>t.status===b.dataset.tab).length;
+    b.querySelector('.n').textContent = n ? n : '';
+    b.classList.toggle('on', b.dataset.tab === tab);
+  }
+  const list = $('list'); list.innerHTML = '';
+  let shown = tasks.filter(t=>t.status===tab);
+  if (tab === 'todo'){
+    for (const [k, label, hot] of QUADS){
+      const group = shown.filter(t => (t.important?(t.urgent?'ui':'i'):(t.urgent?'u':'n')) === k);
+      if (!group.length) continue;
+      const h = document.createElement('div');
+      h.className = 'quad-head' + (hot?' hot':''); h.textContent = label;
+      list.appendChild(h);
+      group.forEach(t => list.appendChild(cardEl(t)));
+    }
+  } else {
+    if (tab === 'done') shown = shown.slice().sort((a,b)=>(b.completedAt?.seconds||b.completedAt||0)-(a.completedAt?.seconds||a.completedAt||0));
+    shown.forEach(t => list.appendChild(cardEl(t)));
+  }
+  if (!shown.length){
+    const e = document.createElement('div'); e.className = 'empty';
+    e.textContent = { todo:'Nothing on the wall. Suspicious.', doing:'Pick up to three things from To Do.', waiting:'Not waiting on anyone. Nice.', done:'Finish something and it lands here.' }[tab];
+    list.appendChild(e);
+  }
+}
+
+// ---------- task sheet ----------
+function openTask(t){
+  editing = t ? t.id : null;
+  draft = t ? { title:t.title, cat:t.cat, important:!!t.important, urgent:!!t.urgent, status:t.status }
+            : { title:'', cat:categories[0]?.id, important:false, urgent:false, status:'todo' };
+  $('sheet-title').textContent = t ? 'Edit task' : 'New task';
+  $('f-title').value = draft.title;
+  $('f-delete').style.display = t ? '' : 'none';
+  paintSheet(); openSheet('task-sheet');
+  if (!t) setTimeout(()=>$('f-title').focus(), 250);
+}
+function paintSheet(){
+  const cats = $('f-cats'); cats.innerHTML = '';
+  for (const c of categories){
+    const b = document.createElement('button');
+    b.className = 'chip cat-chip' + (draft.cat===c.id?' on':'');
+    b.innerHTML = `<span class="sw"></span>`;
+    b.querySelector('.sw').style.background = c.starry ? 'linear-gradient(160deg,#1B2260,#10143A)' : c.color;
+    b.appendChild(document.createTextNode(c.name));
+    b.onclick = () => { draft.cat = c.id; paintSheet(); };
+    cats.appendChild(b);
+  }
+  $('f-important').classList.toggle('on', draft.important);
+  $('f-urgent').classList.toggle('on', draft.urgent);
+  const st = $('f-status'); st.innerHTML = '';
+  for (const [k,label] of STATUSES){
+    const b = document.createElement('button');
+    b.className = 'chip' + (draft.status===k?' on':''); b.textContent = label;
+    b.onclick = () => {
+      if (k==='doing' && doingCount(editing) >= 3){ $('doing-warn').style.display='block'; return; }
+      $('doing-warn').style.display='none'; draft.status = k; paintSheet();
+    };
+    st.appendChild(b);
+  }
+}
+$('f-important').onclick = () => { draft.important = !draft.important; paintSheet(); };
+$('f-urgent').onclick    = () => { draft.urgent    = !draft.urgent;    paintSheet(); };
+$('f-save').onclick = async () => {
+  const title = $('f-title').value.trim();
+  if (!title) return toast('Give it a name');
+  const wasDone = editing && tasks.find(t=>t.id===editing)?.status === 'done';
+  const data = { title, cat:draft.cat, important:draft.important, urgent:draft.urgent, status:draft.status };
+  if (draft.status === 'done' && !wasDone) data.completedAt = LIVE ? fs.serverTimestamp() : Date.now();
+  await saveTask(editing, data);
+  closeSheets(); toast(draft.status === 'done' ? '✦ Done. Onto the wall of glory.' : 'Saved');
+};
+$('f-delete').onclick = async () => { await removeTask(editing); closeSheets(); toast('Deleted'); };
+
+// ---------- category sheet ----------
+let ncStarry = false;
+$('cat-btn').onclick = () => { paintCats(); openSheet('cat-sheet'); };
+$('nc-starry').onclick = () => { ncStarry = !ncStarry; $('nc-starry').classList.toggle('on', ncStarry); };
+$('nc-add').onclick = async () => {
+  const name = $('nc-name').value.trim(); if (!name) return toast('Name it first');
+  const color = $('nc-color').value;
+  const c = { name, color, text: readableText(color), starry: ncStarry, order: categories.length + 1 };
+  if (LIVE) await fs.addDoc(fs.collection(db,'categories'), c);
+  else { categories.push({ ...c, id:'c'+Math.random() }); render(); }
+  $('nc-name').value = ''; ncStarry = false; $('nc-starry').classList.remove('on');
+  setTimeout(paintCats, 300); toast('Category added');
+};
+function paintCats(){
+  const box = $('cat-list'); box.innerHTML = '';
+  for (const c of categories){
+    const row = document.createElement('div'); row.className = 'cat-row';
+    row.innerHTML = `<div class="sw"></div><div class="nm"></div><button class="rm">✕</button>`;
+    row.querySelector('.sw').style.background = c.starry ? 'linear-gradient(160deg,#1B2260,#10143A)' : c.color;
+    row.querySelector('.nm').textContent = c.name;
+    row.querySelector('.rm').onclick = async () => {
+      if (tasks.some(t=>t.cat===c.id)) return toast('In use — move those tasks first');
+      if (LIVE) await fs.deleteDoc(fs.doc(db,'categories',c.id));
+      else { categories = categories.filter(x=>x.id!==c.id); render(); }
+      setTimeout(paintCats, 300);
+    };
+    box.appendChild(row);
+  }
+}
+function readableText(hex){
+  const n = parseInt(hex.slice(1),16);
+  const lum = 0.299*(n>>16) + 0.587*(n>>8&255) + 0.114*(n&255);
+  return lum > 140 ? '#222222' : '#F4F5F9';
+}
+
+// ---------- chrome ----------
+function openSheet(id){ $('scrim').classList.add('open'); $(id).classList.add('open'); }
+function closeSheets(){ $('scrim').classList.remove('open'); document.querySelectorAll('.sheet').forEach(s=>s.classList.remove('open')); $('doing-warn').style.display='none'; }
+$('scrim').onclick = closeSheets;
+$('fab').onclick = () => openTask(null);
+$('tabs').onclick = e => { const b = e.target.closest('button'); if (b){ tab = b.dataset.tab; render(); } };
+let toastTimer;
+function toast(msg){ const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.classList.remove('show'), 2200); }
+
+initData();
+</script>
+</body>
+</html>
