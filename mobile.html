@@ -211,7 +211,7 @@ async function initData(){
   db = fs.getFirestore(fbApp);
   const auth = authMod.getAuth(fbApp);
   const gate = $('gate');
-  $('signin-btn').onclick = () => authMod.signInWithPopup(auth, new authMod.GoogleAuthProvider());
+  $('signin-btn').onclick = () => authMod.signInWithPopup(auth, new authMod.GoogleAuthProvider()).catch(err => alert('Sign-in failed: ' + err.code));
 
   let unsubs = [];
   authMod.onAuthStateChanged(auth, user => {

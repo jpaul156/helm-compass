@@ -314,7 +314,7 @@ if (firebaseConfig.apiKey === 'PASTE_ME'){
   const auth = getAuth(app);
   const db = getFirestore(app);
   const gate = $('gate');
-  $('signin-btn').onclick = () => signInWithPopup(auth, new GoogleAuthProvider());
+  $('signin-btn').onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch(err => alert('Sign-in failed: ' + err.code));
 
   let unsubs = [];
   onAuthStateChanged(auth, user => {
