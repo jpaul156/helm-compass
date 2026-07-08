@@ -39,6 +39,17 @@
   main { padding: 0 16px 110px; }
   .quad-head { font-size:11px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:var(--ink-dim); margin: 18px 2px 8px; }
   .quad-head.hot { color:#E8896F; }
+  .quad-panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px 12px 3px; margin-top:14px; }
+  .quad-panel .quad-head { margin:0 2px 10px; }
+
+  /* Doing tab: three fixed slots, like Helm */
+  .card.big { min-height:112px; }
+  .card.big .t { font-size:26px; }
+  .doing-slot {
+    border:2px dashed var(--line); border-radius:6px; min-height:112px; margin-bottom:10px;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Archivo Black'; font-size:24px; color:#2C3140;
+  }
 
   .card {
     display:flex; align-items:center; gap:12px;
@@ -48,7 +59,10 @@
   }
   .card::before { content:""; position:absolute; inset:0 0 auto 0; height:9px; background:rgba(0,0,0,0.06); border-radius:3px 3px 0 0; }
   .card .t { font-family:'Caveat'; font-weight:700; font-size:21px; line-height:1.05; flex:1; }
+  .card .meta { display:flex; flex-direction:column; align-items:flex-end; gap:3px; }
   .card .c { font-size:10px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; opacity:0.6; }
+  .card .w { font-size:11px; font-weight:700; opacity:0.75; white-space:nowrap; }
+  .card .w.overdue { background:#D3382C; color:#fff; padding:1px 7px; border-radius:9px; opacity:1; }
   .card.starry {
     background:
       radial-gradient(1px 1px at 15% 30%, #fff 99%, transparent),
@@ -58,6 +72,26 @@
       linear-gradient(160deg,#1B2260,#10143A);
   }
   .card .done-t { text-decoration: line-through; text-decoration-thickness:1.5px; opacity:0.75; }
+
+  /* swipe to move */
+  .swipe-wrap { position:relative; margin-bottom:10px; }
+  .swipe-wrap .card {
+    margin-bottom:0; position:relative; z-index:1;
+    touch-action: pan-y; user-select:none; -webkit-user-select:none;
+  }
+  .swipe-under { position:absolute; inset:0; display:flex; gap:6px; visibility:hidden; }
+  .swipe-under.from-left { justify-content:flex-start; }
+  .swipe-under.from-right { justify-content:flex-end; }
+  .swipe-btn {
+    border:none; border-radius:3px; font-family:'Rubik'; font-weight:700; font-size:12px;
+    padding:0 13px; white-space:nowrap;
+  }
+  .swipe-btn:disabled { opacity:0.35; }
+  .sb-doing { background:var(--accent); color:#3A2C00; }
+  .sb-done { background:#3E8E5A; color:#fff; }
+  .sb-wait { background:#3A4050; color:var(--ink); }
+  .sb-quad { background:var(--panel2); color:var(--ink); border:1px solid var(--line); font-size:11px; padding:0 10px; }
+  .sb-quad.hot { color:#E8896F; }
 
   .empty { text-align:center; color:var(--ink-dim); font-size:14px; padding: 40px 20px; line-height:1.6; }
 
@@ -79,10 +113,13 @@
   .sheet.open { transform: none; }
   .sheet h2 { font-size:13px; letter-spacing:0.2em; text-transform:uppercase; color:var(--ink-dim); margin-bottom:14px; font-family:'Archivo Black'; }
   .sheet label { display:block; font-size:12px; color:var(--ink-dim); margin: 14px 0 6px; font-weight:500; }
-  .sheet input[type=text] {
+  .sheet input[type=text], .sheet input[type=datetime-local] {
     width:100%; background:var(--panel); border:1px solid var(--line); border-radius:10px;
     color:var(--ink); font-family:'Rubik'; font-size:16px; padding: 12px;
+    color-scheme: dark;
   }
+  #when-sheet { z-index: 12; }
+  .btn.ghost { background:none; border:1px solid var(--line); color:var(--ink); }
   .chip-row { display:flex; flex-wrap:wrap; gap:8px; }
   .chip {
     border:1px solid var(--line); background:var(--panel); color:var(--ink);
@@ -159,6 +196,8 @@
     <label>Where does it live?</label>
     <div class="status-row" id="f-status"></div>
     <div class="warn" id="doing-warn">Doing is full — three things max. Finish or park something first.</div>
+    <label id="f-when-label" style="display:none"></label>
+    <div class="chip-row" id="f-when" style="display:none"></div>
     <div class="actions">
       <button class="btn del" id="f-delete">Delete</button>
       <button class="btn save" id="f-save">Save</button>
@@ -175,6 +214,17 @@
       <button class="chip" id="nc-starry">✦ Starry</button>
     </div>
     <div class="actions"><button class="btn save" id="nc-add">Add category</button></div>
+  </div>
+
+  <!-- date/time prompt -->
+  <div class="sheet" id="when-sheet">
+    <h2 id="w-title"></h2>
+    <label for="w-input">Date &amp; time</label>
+    <input type="datetime-local" id="w-input">
+    <div class="actions">
+      <button class="btn ghost" id="w-later"></button>
+      <button class="btn save" id="w-ok"></button>
+    </div>
   </div>
 
   <div class="toast" id="toast"></div>
@@ -201,7 +251,7 @@ const QUADS = [
 
 let db, fs;                 // firestore handle + module fns
 let categories = [], tasks = [];
-let tab = 'todo';
+let tab = 'doing';           // open on Doing so current tasks stay top of mind
 let editing = null;         // task id being edited, or null for new
 let draft = {};             // sheet state
 
@@ -252,17 +302,145 @@ async function removeTask(id){
 const catById = id => categories.find(c=>c.id===id) || {name:'?', color:'#888', text:'#111'};
 const doingCount = skip => tasks.filter(t => t.status==='doing' && t.id!==skip).length;
 
-function cardEl(t){
+function cardEl(t, big){
   const c = catById(t.cat);
   const el = document.createElement('div');
-  el.className = 'card' + (c.starry ? ' starry' : '');
+  el.className = 'card' + (big ? ' big' : '') + (c.starry ? ' starry' : '');
   if (!c.starry) el.style.background = c.color;
   el.style.color = c.text;
-  el.innerHTML = `<div class="t${t.status==='done'?' done-t':''}"></div><div class="c"></div>`;
+  el.innerHTML = `<div class="t${t.status==='done'?' done-t':''}"></div><div class="meta"><div class="c"></div><div class="w"></div></div>`;
   el.querySelector('.t').textContent = t.title;
   el.querySelector('.c').textContent = c.name + (t.status==='todo' ? (t.important?' ★':'') + (t.urgent?' ⚡':'') : '');
+  const whenMs = t.status==='todo' && t.important && !t.urgent ? t.scheduledAt
+               : t.status==='doing' ? t.targetAt : null;
+  const w = el.querySelector('.w');
+  if (whenMs){
+    w.textContent = (t.status==='doing' ? '🎯 ' : '📅 ') + fmtWhen(whenMs);
+    w.classList.toggle('overdue', whenMs < Date.now());
+  } else w.remove();
   el.onclick = () => openTask(t);
   return el;
+}
+const fmtWhen = ms => new Date(ms).toLocaleString([], { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+
+// ---------- swipe to move ----------
+// Any move (button or full swipe) funnels through here, so the same
+// schedule/target prompt rules apply as in the editor and on Helm.
+async function moveTask(t, dest){
+  if (dest.status === 'doing' && doingCount(t.id) >= 3)
+    return toast('Doing is full — three things max. Finish or park something first.');
+  const data = { status: dest.status };
+  if (dest.status === 'todo'){ data.important = dest.important; data.urgent = dest.urgent; }
+  if (dest.status === 'done' && t.status !== 'done') data.completedAt = LIVE ? fs.serverTimestamp() : Date.now();
+  const nowSched = dest.status === 'todo' && dest.important && !dest.urgent;
+  if (nowSched && !inSched(t)){
+    const ms = await askWhen('Schedule for when?', 'Set time', 'Schedule later', defaultSched());
+    if (ms) data.scheduledAt = ms;
+  } else if (dest.status === 'doing' && t.status !== 'doing'){
+    const ms = await askWhen('Completion target', 'Set target', 'No target', defaultTarget());
+    if (ms) data.targetAt = ms;
+  }
+  if (!nowSched && t.scheduledAt != null) data.scheduledAt = LIVE ? fs.deleteField() : undefined;
+  if (dest.status !== 'doing' && t.targetAt != null) data.targetAt = LIVE ? fs.deleteField() : undefined;
+  await saveTask(t.id, data);
+  toast(dest.status === 'done' ? '✦ Done. Onto the wall of glory.' : 'Moved');
+}
+
+const QUAD_DESTS = [
+  ['ui', 'Do first ★⚡', { status:'todo', important:true,  urgent:true  }],
+  ['i',  'Schedule ★',   { status:'todo', important:true,  urgent:false }],
+  ['u',  'Fit in ⚡',     { status:'todo', important:false, urgent:true  }],
+  ['n',  'Whenever',     { status:'todo', important:false, urgent:false }],
+];
+const quadOf = t => t.important ? (t.urgent ? 'ui' : 'i') : (t.urgent ? 'u' : 'n');
+
+function swipeBtn(label, cls, disabled, fn){
+  const b = document.createElement('button');
+  b.className = 'swipe-btn ' + cls;
+  b.textContent = label;
+  if (disabled) b.disabled = true;
+  else b.onclick = e => { e.stopPropagation(); fn(); };
+  return b;
+}
+
+function swipeWrap(t, big){
+  const wrap = document.createElement('div'); wrap.className = 'swipe-wrap';
+  // Revealed by swiping RIGHT (sits under the left edge):
+  const underR = document.createElement('div'); underR.className = 'swipe-under from-left';
+  if (t.status === 'doing'){
+    underR.appendChild(swipeBtn('Waiting', 'sb-wait', false, () => moveTask(t, { status:'waiting' })));
+  } else {
+    underR.appendChild(swipeBtn('Doing', 'sb-doing', doingCount(t.id) >= 3, () => moveTask(t, { status:'doing' })));
+  }
+  underR.appendChild(swipeBtn('Done', 'sb-done', false, () => moveTask(t, { status:'done' })));
+  // Revealed by swiping LEFT (sits under the right edge): the four quadrants.
+  const underL = document.createElement('div'); underL.className = 'swipe-under from-right';
+  for (const [k, label, dest] of QUAD_DESTS)
+    underL.appendChild(swipeBtn(label, 'sb-quad' + (k === 'ui' ? ' hot' : ''),
+      t.status === 'todo' && quadOf(t) === k, () => moveTask(t, dest)));
+  const card = cardEl(t, big);
+  wrap.appendChild(underR); wrap.appendChild(underL); wrap.appendChild(card);
+  attachSwipe(wrap, card, underR, underL, t);
+  return wrap;
+}
+
+function attachSwipe(wrap, card, underR, underL, t){
+  let x0 = 0, y0 = 0, base = 0, cur = 0, axis = null, pid = null;
+  const revealW = u => [...u.children].reduce((s, b) => s + b.offsetWidth, 0) + 6 * u.children.length;
+  const setX = (x, anim) => {
+    card.style.transition = anim ? 'transform 0.18s ease' : 'none';
+    card.style.transform = x ? `translateX(${x}px)` : '';
+    underR.style.visibility = x > 0 ? 'visible' : 'hidden';
+    underL.style.visibility = x < 0 ? 'visible' : 'hidden';
+    cur = x;
+  };
+  card.addEventListener('pointerdown', e => {
+    if (e.button) return;
+    x0 = e.clientX; y0 = e.clientY; base = cur; axis = null; pid = e.pointerId;
+  });
+  card.addEventListener('pointermove', e => {
+    if (e.pointerId !== pid) return;
+    const dx = e.clientX - x0, dy = e.clientY - y0;
+    if (!axis){
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+      if (axis === 'x') card.setPointerCapture(pid);
+    }
+    if (axis !== 'x') return;
+    let x = base + dx;
+    x = Math.max(-revealW(underL) - 20, Math.min(x, wrap.offsetWidth));
+    setX(x, false);
+  });
+  card.addEventListener('pointerup', e => {
+    if (e.pointerId !== pid) return;
+    pid = null;
+    if (axis !== 'x') return;
+    const w = wrap.offsetWidth, rw = revealW(underR), lw = revealW(underL);
+    if (cur > w * 0.62){
+      // Full swipe right: To Do → Doing (cap-aware); Doing & Waiting → Done. No full-swipe default leftward.
+      const dest = t.status === 'todo' ? { status:'doing' } : { status:'done' };
+      if (dest.status === 'doing' && doingCount(t.id) >= 3){
+        toast('Doing is full — three things max. Finish or park something first.');
+        setX(0, true);
+      } else {
+        setX(w, true);
+        moveTask(t, dest);
+      }
+    }
+    else if (cur > rw * 0.5) setX(rw, true);
+    else if (cur < -lw * 0.5) setX(-lw, true);
+    else setX(0, true);
+  });
+  card.addEventListener('pointercancel', e => {
+    if (e.pointerId !== pid) return;
+    pid = null;
+    if (axis === 'x') setX(0, true);
+  });
+  // A swipe (or a tap on an open card) must not open the editor.
+  card.addEventListener('click', e => {
+    if (axis === 'x'){ e.stopImmediatePropagation(); e.preventDefault(); axis = null; }
+    else if (cur !== 0){ e.stopImmediatePropagation(); e.preventDefault(); setX(0, true); }
+  }, true);
 }
 function render(){
   // tab counts
@@ -277,16 +455,29 @@ function render(){
     for (const [k, label, hot] of QUADS){
       const group = shown.filter(t => (t.important?(t.urgent?'ui':'i'):(t.urgent?'u':'n')) === k);
       if (!group.length) continue;
+      const panel = document.createElement('div');
+      panel.className = 'quad-panel';
       const h = document.createElement('div');
       h.className = 'quad-head' + (hot?' hot':''); h.textContent = label;
-      list.appendChild(h);
-      group.forEach(t => list.appendChild(cardEl(t)));
+      panel.appendChild(h);
+      group.forEach(t => panel.appendChild(swipeWrap(t)));
+      list.appendChild(panel);
     }
+  } else if (tab === 'doing'){
+    // Three fixed slots, like Helm: an empty slot is capacity, not wasted space.
+    shown.forEach(t => list.appendChild(swipeWrap(t, true)));
+    for (let i = shown.length; i < 3; i++){
+      const s = document.createElement('div');
+      s.className = 'doing-slot'; s.textContent = i + 1;
+      list.appendChild(s);
+    }
+  } else if (tab === 'done'){
+    shown = shown.slice().sort((a,b)=>(b.completedAt?.seconds||b.completedAt||0)-(a.completedAt?.seconds||a.completedAt||0));
+    shown.forEach(t => list.appendChild(cardEl(t)));   // trophy list: no swipes
   } else {
-    if (tab === 'done') shown = shown.slice().sort((a,b)=>(b.completedAt?.seconds||b.completedAt||0)-(a.completedAt?.seconds||a.completedAt||0));
-    shown.forEach(t => list.appendChild(cardEl(t)));
+    shown.forEach(t => list.appendChild(swipeWrap(t)));
   }
-  if (!shown.length){
+  if (!shown.length && tab !== 'doing'){
     const e = document.createElement('div'); e.className = 'empty';
     e.textContent = { todo:'Nothing on the wall. Suspicious.', doing:'Pick up to three things from To Do.', waiting:'Not waiting on anyone. Nice.', done:'Finish something and it lands here.' }[tab];
     list.appendChild(e);
@@ -294,10 +485,11 @@ function render(){
 }
 
 // ---------- task sheet ----------
+const inSched = d => d.status==='todo' && !!d.important && !d.urgent;
 function openTask(t){
   editing = t ? t.id : null;
-  draft = t ? { title:t.title, cat:t.cat, important:!!t.important, urgent:!!t.urgent, status:t.status }
-            : { title:'', cat:categories[0]?.id, important:false, urgent:false, status:'todo' };
+  draft = t ? { title:t.title, cat:t.cat, important:!!t.important, urgent:!!t.urgent, status:t.status, scheduledAt:t.scheduledAt ?? null, targetAt:t.targetAt ?? null }
+            : { title:'', cat:categories[0]?.id, important:false, urgent:false, status:'todo', scheduledAt:null, targetAt:null };
   $('sheet-title').textContent = t ? 'Edit task' : 'New task';
   $('f-title').value = draft.title;
   $('f-delete').style.display = t ? '' : 'none';
@@ -327,17 +519,56 @@ function paintSheet(){
     };
     st.appendChild(b);
   }
+  paintWhenRow();
+}
+function paintWhenRow(){
+  const showSched = inSched(draft), showTarget = draft.status==='doing';
+  const wl = $('f-when-label'), wr = $('f-when');
+  wl.style.display = wr.style.display = (showSched || showTarget) ? '' : 'none';
+  if (!showSched && !showTarget) return;
+  wl.textContent = showSched ? '📅 Scheduled for' : '🎯 Completion target';
+  const key = showSched ? 'scheduledAt' : 'targetAt';
+  wr.innerHTML = '';
+  const pick = document.createElement('button');
+  pick.className = 'chip' + (draft[key] ? ' on' : '');
+  pick.textContent = draft[key] ? fmtWhen(draft[key]) : 'Pick a time';
+  pick.onclick = async () => {
+    const ms = await askWhen(showSched ? 'Schedule for when?' : 'Completion target',
+                             showSched ? 'Set time' : 'Set target',
+                             'Never mind',
+                             draft[key] || (showSched ? defaultSched() : defaultTarget()));
+    if (ms) draft[key] = ms;
+    paintSheet();
+  };
+  wr.appendChild(pick);
+  if (draft[key]){
+    const clear = document.createElement('button');
+    clear.className = 'chip'; clear.textContent = '✕ Clear';
+    clear.onclick = () => { draft[key] = null; paintSheet(); };
+    wr.appendChild(clear);
+  }
 }
 $('f-important').onclick = () => { draft.important = !draft.important; paintSheet(); };
 $('f-urgent').onclick    = () => { draft.urgent    = !draft.urgent;    paintSheet(); };
 $('f-save').onclick = async () => {
   const title = $('f-title').value.trim();
   if (!title) return toast('Give it a name');
-  const wasDone = editing && tasks.find(t=>t.id===editing)?.status === 'done';
+  const prev = editing ? tasks.find(t=>t.id===editing) : null;
   const data = { title, cat:draft.cat, important:draft.important, urgent:draft.urgent, status:draft.status };
-  if (draft.status === 'done' && !wasDone) data.completedAt = LIVE ? fs.serverTimestamp() : Date.now();
+  if (draft.status === 'done' && prev?.status !== 'done') data.completedAt = LIVE ? fs.serverTimestamp() : Date.now();
+  closeSheets();
+  // Prompt for a date on the way *into* the Schedule quadrant or Doing (unless one was already picked in the sheet).
+  if (inSched(draft) && !(prev && inSched(prev)) && !draft.scheduledAt){
+    draft.scheduledAt = await askWhen('Schedule for when?', 'Set time', 'Schedule later', defaultSched());
+  } else if (draft.status === 'doing' && prev?.status !== 'doing' && !draft.targetAt){
+    draft.targetAt = await askWhen('Completion target', 'Set target', 'No target', defaultTarget());
+  }
+  if (inSched(draft) && draft.scheduledAt) data.scheduledAt = draft.scheduledAt;
+  else if (prev?.scheduledAt != null) data.scheduledAt = LIVE ? fs.deleteField() : undefined;
+  if (draft.status === 'doing' && draft.targetAt) data.targetAt = draft.targetAt;
+  else if (prev?.targetAt != null) data.targetAt = LIVE ? fs.deleteField() : undefined;
   await saveTask(editing, data);
-  closeSheets(); toast(draft.status === 'done' ? '✦ Done. Onto the wall of glory.' : 'Saved');
+  toast(draft.status === 'done' ? '✦ Done. Onto the wall of glory.' : 'Saved');
 };
 $('f-delete').onclick = async () => { await removeTask(editing); closeSheets(); toast('Deleted'); };
 
@@ -376,10 +607,34 @@ function readableText(hex){
   return lum > 140 ? '#222222' : '#F4F5F9';
 }
 
+// ---------- date/time prompt ----------
+function toLocalInput(ms){ const d = new Date(ms); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0,16); }
+function defaultSched(){ const d = new Date(); d.setDate(d.getDate()+1); d.setHours(9,0,0,0); return d.getTime(); }
+function defaultTarget(){ const d = new Date(); d.setDate(d.getDate()+1); d.setHours(17,0,0,0); return d.getTime(); }
+
+let whenResolve = null;
+function askWhen(title, okLabel, laterLabel, defMs){
+  return new Promise(res => {
+    $('w-title').textContent = title;
+    $('w-ok').textContent = okLabel;
+    $('w-later').textContent = laterLabel;
+    $('w-input').value = toLocalInput(defMs);
+    whenResolve = v => {
+      whenResolve = null;
+      $('when-sheet').classList.remove('open');
+      if (!$('task-sheet').classList.contains('open')) $('scrim').classList.remove('open');
+      res(v);
+    };
+    openSheet('when-sheet');
+  });
+}
+$('w-ok').onclick = () => { const d = new Date($('w-input').value); whenResolve?.(isNaN(d) ? null : d.getTime()); };
+$('w-later').onclick = () => whenResolve?.(null);
+
 // ---------- chrome ----------
 function openSheet(id){ $('scrim').classList.add('open'); $(id).classList.add('open'); }
 function closeSheets(){ $('scrim').classList.remove('open'); document.querySelectorAll('.sheet').forEach(s=>s.classList.remove('open')); $('doing-warn').style.display='none'; }
-$('scrim').onclick = closeSheets;
+$('scrim').onclick = () => { if (whenResolve) whenResolve(null); else closeSheets(); };
 $('fab').onclick = () => openTask(null);
 $('tabs').onclick = e => { const b = e.target.closest('button'); if (b){ tab = b.dataset.tab; render(); } };
 let toastTimer;

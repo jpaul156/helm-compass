@@ -26,7 +26,7 @@
     color: var(--ink);
     font-family: 'Rubik', sans-serif;
     overflow: hidden;
-    cursor: none;                       /* it's a TV */
+    /* cursor stays visible: the TV is a laptop screen with mouse + keyboard */
   }
 
   .board {
@@ -148,6 +148,16 @@
     margin-top: auto; font-size: 0.95vmin; font-weight: 700;
     letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.65;
   }
+  .note-when {
+    margin-top: auto; align-self: flex-start;
+    font-size: 1vmin; font-weight: 700; letter-spacing: 0.04em; opacity: 0.78;
+  }
+  .note-when.overdue {
+    background: #D3382C; color: #fff; opacity: 1;
+    padding: 0.15vmin 0.7vmin; border-radius: 1vmin;
+  }
+  .note-when + .note-cat { margin-top: 0.4vmin; }
+  .slot .note .note-when { font-size: 1.3vmin; }
   .note.starry {
     background:
       radial-gradient(1px 1px at 18% 28%, #fff 99%, transparent),
@@ -163,6 +173,50 @@
     to   { transform: rotate(var(--rot)) scale(1); }
   }
   @media (prefers-reduced-motion: reduce) { .note { animation: none; } }
+
+  /* ---------- drag & drop ---------- */
+  .note, .done-row { cursor: grab; }
+  .note:active, .done-row:active { cursor: grabbing; }
+  .drop-hot { box-shadow: inset 0 0 0 2px var(--accent) !important; border-radius: 1.2vmin; }
+  .quad.drop-hot { border-radius: 0; }
+
+  /* ---------- date prompt modal ---------- */
+  .modal-scrim {
+    position: fixed; inset: 0; z-index: 40;
+    background: rgba(0,0,0,0.6);
+    display: none; align-items: center; justify-content: center;
+  }
+  .modal-scrim.open { display: flex; }
+  .modal {
+    background: var(--panel-bright); border-radius: 1.2vmin;
+    padding: 2.4vmin; width: 38vmin;
+    box-shadow: 0 1.5vmin 5vmin rgba(0,0,0,0.6), 0 0 0 1px rgba(255,200,69,0.25);
+  }
+  .modal h3 {
+    font-family: 'Archivo Black'; font-size: 1.4vmin; letter-spacing: 0.25em;
+    text-transform: uppercase; color: var(--accent); margin-bottom: 1vmin;
+  }
+  .modal .task-name { font-family: 'Caveat', cursive; font-weight: 700; font-size: 2.6vmin; margin-bottom: 1.6vmin; }
+  .modal input[type=datetime-local] {
+    width: 100%; background: var(--panel); border: 1px solid var(--slot-dash);
+    color: var(--ink); border-radius: 0.8vmin; padding: 1vmin;
+    font-family: 'Rubik'; font-size: 1.6vmin; color-scheme: dark;
+  }
+  .modal .m-actions { display: flex; gap: 1vmin; margin-top: 1.8vmin; }
+  .modal .m-actions button {
+    flex: 1; border: none; border-radius: 0.8vmin; padding: 1.2vmin 0;
+    font-family: 'Rubik'; font-weight: 700; font-size: 1.4vmin; cursor: pointer;
+  }
+  .modal .primary { background: var(--accent); color: #3A2C00; }
+  .modal .ghost { background: none; border: 1px solid var(--slot-dash) !important; color: var(--ink); }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 3vmin; transform: translateX(-50%);
+    background: #2C3140; color: var(--ink); padding: 1vmin 2.2vmin; border-radius: 3vmin;
+    font-size: 1.5vmin; z-index: 60; opacity: 0; transition: opacity 0.2s;
+    pointer-events: none; white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
 
   .demo-badge {
     position: fixed; bottom: 1vmin; left: 50%; transform: translateX(-50%);
@@ -216,6 +270,19 @@
     </div>
   </div>
 
+  <div class="modal-scrim" id="modal-scrim">
+    <div class="modal">
+      <h3 id="m-title"></h3>
+      <div class="task-name" id="m-task"></div>
+      <input type="datetime-local" id="m-when">
+      <div class="m-actions">
+        <button class="ghost" id="m-later"></button>
+        <button class="primary" id="m-ok"></button>
+      </div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+
   <div class="gate" id="gate" style="display:none">
     <div>
       <div class="gate-title">Helm</div>
@@ -244,7 +311,23 @@ function noteEl(t, big){
   el.innerHTML = `<div class="note-title"></div><div class="note-cat"></div>`;
   el.querySelector('.note-title').textContent = t.title;
   el.querySelector('.note-cat').textContent = c.name;
+  const whenMs = t.status === 'todo' && t.important && !t.urgent ? t.scheduledAt
+               : t.status === 'doing' ? t.targetAt : null;
+  if (whenMs){
+    const w = document.createElement('div');
+    w.className = 'note-when' + (whenMs < Date.now() ? ' overdue' : '');
+    w.textContent = (t.status === 'doing' ? '🎯 ' : '📅 ') + fmtWhen(whenMs);
+    el.insertBefore(w, el.querySelector('.note-cat'));
+  }
+  el.draggable = true;
+  el.addEventListener('dragstart', e => {
+    e.dataTransfer.setData('text/plain', t.id);
+    e.dataTransfer.effectAllowed = 'move';
+  });
   return el;
+}
+function fmtWhen(ms){
+  return new Date(ms).toLocaleString([], { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
 }
 function shade(hex, pct){
   const n = parseInt(hex.slice(1), 16), a = Math.round(2.55 * pct);
@@ -296,9 +379,113 @@ function render(){
     row.querySelector('.dot').style.background = c.starry ? '#7D86E8' : c.color;
     row.querySelector('.t').textContent = t.title;
     row.querySelector('.when').textContent = ago(t.completedAt);
+    row.draggable = true;
+    row.addEventListener('dragstart', e => {
+      e.dataTransfer.setData('text/plain', t.id);
+      e.dataTransfer.effectAllowed = 'move';
+    });
     dl.appendChild(row);
   });
 }
+
+// ---------- drag & drop (mouse + keyboard: Helm runs on a laptop) ----------
+const DEL = Symbol('deleteField'), TS = Symbol('serverTimestamp');
+let live = null;   // {db, doc, updateDoc, serverTimestamp, deleteField} once signed in
+
+async function applyPatch(id, patch){
+  if (live){
+    const p = {};
+    for (const [k, v] of Object.entries(patch))
+      p[k] = v === DEL ? live.deleteField() : v === TS ? live.serverTimestamp() : v;
+    await live.updateDoc(live.doc(live.db, 'tasks', id), p);
+  } else {
+    const t = tasks.find(x => x.id === id); if (!t) return;
+    for (const [k, v] of Object.entries(patch)){
+      if (v === DEL) delete t[k]; else t[k] = v === TS ? Date.now() : v;
+    }
+    render();
+  }
+}
+
+const doingCount = skip => tasks.filter(t => t.status === 'doing' && t.id !== skip).length;
+const inSched = t => t.status === 'todo' && !!t.important && !t.urgent;
+
+async function handleDrop(taskId, dest){
+  const t = tasks.find(x => x.id === taskId); if (!t) return;
+  const samePlace = t.status === dest.status &&
+    (dest.status !== 'todo' || (!!t.important === dest.important && !!t.urgent === dest.urgent));
+  if (samePlace) return;
+  if (dest.status === 'doing' && doingCount(t.id) >= 3)
+    return toast('Doing is full — three things max. Finish or park something first.');
+
+  const patch = { status: dest.status };
+  if (dest.status === 'todo'){ patch.important = dest.important; patch.urgent = dest.urgent; }
+  if (dest.status === 'done' && t.status !== 'done') patch.completedAt = TS;
+
+  const nowSched = dest.status === 'todo' && dest.important && !dest.urgent;
+  if (nowSched && !inSched(t)){
+    const ms = await askWhen('Schedule', t.title, 'Set time', 'Schedule later', defaultSched());
+    if (ms) patch.scheduledAt = ms;
+  } else if (dest.status === 'doing' && t.status !== 'doing'){
+    const ms = await askWhen('Completion target', t.title, 'Set target', 'No target', defaultTarget());
+    if (ms) patch.targetAt = ms;
+  }
+  if (!nowSched && t.scheduledAt != null) patch.scheduledAt = DEL;
+  if (dest.status !== 'doing' && t.targetAt != null) patch.targetAt = DEL;
+  await applyPatch(t.id, patch);
+}
+
+const DROP_TARGETS = [
+  [document.querySelector('[data-q="ui"]'), { status:'todo', important:true,  urgent:true  }],
+  [document.querySelector('[data-q="i"]'),  { status:'todo', important:true,  urgent:false }],
+  [document.querySelector('[data-q="u"]'),  { status:'todo', important:false, urgent:true  }],
+  [document.querySelector('[data-q="n"]'),  { status:'todo', important:false, urgent:false }],
+  [document.querySelector('.doing'),        { status:'doing' }],
+  [document.querySelector('.waiting'),      { status:'waiting' }],
+  [document.querySelector('.done'),         { status:'done' }],
+];
+for (const [el, dest] of DROP_TARGETS){
+  el.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; el.classList.add('drop-hot'); });
+  el.addEventListener('dragleave', e => { if (!el.contains(e.relatedTarget)) el.classList.remove('drop-hot'); });
+  el.addEventListener('drop', e => {
+    e.preventDefault(); el.classList.remove('drop-hot');
+    const id = e.dataTransfer.getData('text/plain');
+    if (id) handleDrop(id, dest);
+  });
+}
+
+// ---------- date prompt ----------
+function toLocalInput(ms){ const d = new Date(ms); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); }
+function defaultSched(){ const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d.getTime(); }
+function defaultTarget(){ const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(17, 0, 0, 0); return d.getTime(); }
+
+function askWhen(title, taskTitle, okLabel, laterLabel, defMs){
+  return new Promise(res => {
+    $('m-title').textContent = title;
+    $('m-task').textContent = taskTitle;
+    $('m-ok').textContent = okLabel;
+    $('m-later').textContent = laterLabel;
+    const inp = $('m-when'); inp.value = toLocalInput(defMs);
+    const scrim = $('modal-scrim'); scrim.classList.add('open');
+    const done = v => { scrim.classList.remove('open'); document.removeEventListener('keydown', onKey); res(v); };
+    const onKey = e => {
+      if (e.key === 'Escape') done(null);
+      if (e.key === 'Enter'){ e.preventDefault(); $('m-ok').click(); }
+    };
+    $('m-ok').onclick = () => { const d = new Date(inp.value); done(isNaN(d) ? null : d.getTime()); };
+    $('m-later').onclick = () => done(null);
+    document.addEventListener('keydown', onKey);
+    inp.focus();
+  });
+}
+
+let toastTimer;
+function toast(msg){
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+setInterval(render, 60000);   // keep "overdue" styling and relative dates fresh
 
 if (firebaseConfig.apiKey === 'PASTE_ME'){
   // ---- demo mode ----
@@ -310,10 +497,11 @@ if (firebaseConfig.apiKey === 'PASTE_ME'){
 } else {
   const { initializeApp } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
   const { getAuth, GoogleAuthProvider, onAuthStateChanged, signInWithPopup } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js');
-  const { getFirestore, collection, onSnapshot } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+  const { getFirestore, collection, onSnapshot, doc, updateDoc, serverTimestamp, deleteField } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
   const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
   const db = getFirestore(app);
+  live = { db, doc, updateDoc, serverTimestamp, deleteField };
   const gate = $('gate');
   $('signin-btn').onclick = () => signInWithPopup(auth, new GoogleAuthProvider()).catch(err => alert('Sign-in failed: ' + err.code));
 

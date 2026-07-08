@@ -41,8 +41,8 @@ Categories are user-editable: add with name + color picker + optional "starry" b
 
 Two single-file HTML apps + one shared config module, matching Joel's standing preference: **no build step, vanilla JS, Firebase, GitHub Pages** (same pattern as relay-race and Bounty Board).
 
-- `index.html` — **Helm**, the TV view. **Read-only.** No cursor (hidden), no interactive elements, just two `onSnapshot` listeners repainting the wall in realtime. This means the TV never needs input hardware; the phone is the only controller.
-- `mobile.html` — **Compass**, the controller. Tabs per section, quadrant-grouped To Do list, bottom-sheet editor (title, category chips, ★ Important / ⚡ Urgent toggles, section picker), FAB to add, category manager sheet.
+- `index.html` — **Helm**, the TV view. The TV is a laptop's external monitor with mouse + keyboard, so Helm is no longer read-only: notes (and Done rows) are draggable onto any quadrant or the Doing/Waiting/Done sections — its *only* interaction. There's no editor UI; content edits stay on the phone. Drops write through the same `applyPatch()` path in both live and demo mode; a modal date prompt appears on moves into the Schedule quadrant or Doing (Enter = confirm, Esc = skip). The Doing cap blocks the drop with a toast, mirroring Compass.
+- `mobile.html` — **Compass**, the controller. Tabs per section — **opens on Doing** so current tasks stay top of mind. To Do groups each quadrant in a bordered panel (Helm-style delineation; empty quadrants aren't rendered). The Doing tab mirrors Helm's three fixed slots: tasks as taller "big" cards, remaining capacity as dashed numbered slots. Bottom-sheet editor (title, category chips, ★ Important / ⚡ Urgent toggles, section picker), FAB to add, category manager sheet. Cards are **swipeable** (pointer events, axis-locked against vertical scroll via `touch-action: pan-y`): swipe right reveals Doing + Done buttons (Waiting + Done on the Doing tab; Doing disabled when full), swipe left reveals the four quadrant chips (current quadrant disabled on To Do). A full right swipe is a shortcut — To Do → Doing (bounces with a toast when full), Doing/Waiting → Done; leftward has no full-swipe default. The Done tab is inert. All swipe moves funnel through `moveTask()`, which applies the same date-prompt and field-cleanup rules as the editor and Helm's drag-and-drop.
 - `firebase-config.js` — config + default category seed + demo data. Both views import it, so the config is pasted once.
 
 **Demo mode:** while `apiKey === "PASTE_ME"`, both views run on in-memory sample data (Joel's actual example tasks). This lets the design be previewed and iterated before the Firebase project exists. Mobile edits in demo mode don't persist — a toast says so.
@@ -50,7 +50,7 @@ Two single-file HTML apps + one shared config module, matching Joel's standing p
 **Firebase (new project, per Joel's choice):**
 
 - Firestore, two collections:
-  - `tasks`: `{ title, cat (category doc id), status: "todo"|"doing"|"waiting"|"done", important: bool, urgent: bool, createdAt, completedAt }`. `completedAt` is set via `serverTimestamp()` only on the transition *into* done (checked against previous status so re-saving a done task doesn't bump it to the top).
+  - `tasks`: `{ title, cat (category doc id), status: "todo"|"doing"|"waiting"|"done", important: bool, urgent: bool, createdAt, completedAt, scheduledAt?, targetAt? }`. `completedAt` is set via `serverTimestamp()` only on the transition *into* done (checked against previous status so re-saving a done task doesn't bump it to the top). `scheduledAt` (Schedule-quadrant tasks) and `targetAt` (Doing completion target) are **ms epoch numbers**, not Firestore Timestamps — simpler to read/write from both clients. Both are prompted for on the transition *into* their home (Schedule quadrant / Doing) — via drag on Helm, and via new-task creation or editor save on Compass — always skippable ("Schedule later" / "No target"), editable later in the Compass sheet, and deleted (`deleteField()`) when the task moves back out. Display is ambient only: a small 📅/🎯 line on the note that turns into a red pill once past due (`render()` re-runs every 60s to keep this fresh). No reminders, no auto-escalation — overdue styling was an explicit choice over auto-flipping tasks to urgent.
   - `categories`: `{ name, color, text, starry, order }`. Seeded from `DEFAULT_CATEGORIES` on first run if the collection is empty (mobile does the seeding; TV just reads).
 - Firebase JS SDK v10 modular, loaded from the gstatic CDN via dynamic `import()` inside `<script type="module">` — the import only happens in live mode, so demo mode makes zero network calls to Firebase.
 - SDK version is pinned in the import URLs; bump deliberately, both files at once.
@@ -61,8 +61,8 @@ Two single-file HTML apps + one shared config module, matching Joel's standing p
 
 ## Deliberate non-features
 
-- No drag-and-drop. On a phone, tap → sheet → pick section is faster and less error-prone than dragging between columns; on the TV there's no pointer at all.
-- No due dates, reminders, or notifications. Urgency is a toggle Joel sets with his own judgment — that's the Eisenhower method. The wall's job is ambient visibility, not nagging.
+- No drag-and-drop *on the phone* — swiping replaced it. Horizontal swipes reveal move buttons (with full-swipe-right shortcuts); dragging cards between columns would fight vertical scrolling on a small screen. (The TV got drag-and-drop once Joel confirmed it's a laptop screen with a mouse — see Architecture.)
+- No reminders or notifications. `scheduledAt`/`targetAt` exist but are display-only with passive overdue styling; urgency remains a toggle Joel sets with his own judgment — that's the Eisenhower method. The wall's job is ambient visibility, not nagging.
 - No occupancy/screen-off logic — handled in hardware (controlled outlet), explicitly out of scope.
 
 ## Ideas parked for later

@@ -26,11 +26,12 @@ export const DEFAULT_CATEGORIES = [
 ];
 
 // Sample tasks for demo mode only (never written to Firestore).
+// scheduledAt / targetAt are ms epoch numbers; offsets here demo upcoming and overdue styling.
 export const DEMO_TASKS = [
   { id:"d1", title:"Send paperwork to tax preparer", cat:5, status:"todo",  important:true,  urgent:true  },
-  { id:"d2", title:"Pay electric bill",              cat:5, status:"todo",  important:true,  urgent:false },
+  { id:"d2", title:"Pay electric bill",              cat:5, status:"todo",  important:true,  urgent:false, scheduledAt: Date.now() - 2*864e5 },
   { id:"d3", title:"Add new Bounty Board challenge", cat:0, status:"todo",  important:false, urgent:false },
-  { id:"d4", title:"Submit expense report",          cat:4, status:"doing", important:true,  urgent:true  },
+  { id:"d4", title:"Submit expense report",          cat:4, status:"doing", important:true,  urgent:true,  targetAt: Date.now() + 864e5 },
   { id:"d5", title:"Moreland St petition signatures",cat:1, status:"doing", important:true,  urgent:false },
   { id:"d6", title:"Tonight: event scraper for Crystal Ballroom", cat:6, status:"todo", important:false, urgent:false },
   { id:"d7", title:"Email city council re: upzoning",cat:1, status:"waiting", important:true, urgent:false },
